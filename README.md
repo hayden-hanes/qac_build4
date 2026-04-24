@@ -1,8 +1,6 @@
 # Build 4
 
 **Course:** QAC387  
-**Assignment Type:** Individual  
-**Focus:** Python functions, error checks, reproducible analysis pipelines  
 
 ---
 
