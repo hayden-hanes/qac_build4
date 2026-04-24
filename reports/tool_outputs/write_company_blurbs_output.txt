@@ -1,0 +1,17 @@
+[AAPL] APPLE INC
+Apple Inc. demonstrates strong profitability with a net income of $112,010 million and an EBIT of $133,050 million, reflecting its efficient operations and robust demand for its products. However, with an EV/EBIT ratio of 28.7x, the company's valuation appears elevated compared to the average range of 15-25x typically seen in large-cap stocks, indicating potential overvaluation or high investor expectations for future growth.
+
+[AMZN] AMAZON.COM INC
+Amazon.com Inc (AMZN) demonstrates strong profitability with a net income of $77,670 million and an EBIT of $86,497 million, reflecting its ability to generate substantial earnings. However, with an EV/EBIT ratio of 29.3x, the company's valuation appears elevated compared to the average range of 15-25x typically seen for large-cap stocks, suggesting that investors may be pricing in significant growth expectations.
+
+[GOOGL] ALPHABET INC
+Alphabet Inc. (GOOGL) demonstrates strong profitability with a net income of $132,170 million and an EBIT margin of approximately 33.2%. However, with an EV/EBIT ratio of 27.8x, the company's valuation is above the average range for large-cap stocks, indicating that investors may be pricing in significant growth expectations.
+
+[META] META PLATFORMS INC
+META Platforms Inc. demonstrates strong profitability with a net income of $60,458 million and an EBIT margin of approximately 41.5%, indicating efficient operations and robust revenue generation. With an EV/EBIT ratio of 20.1x, META is positioned within the average range for large-cap stocks, suggesting a balanced valuation relative to its earnings potential.
+
+[MSFT] MICROSOFT CORP
+Microsoft Corp (MSFT) demonstrates strong profitability with a net income of $101,832 million and an EBIT margin that reflects its efficient operations. However, its EV/EBIT ratio of 28.9x suggests that the stock is trading at a premium compared to the average range of 15-25x typically seen for large-cap stocks, indicating high investor expectations for future growth.
+
+[NVDA] NVIDIA CORP
+NVIDIA Corp (NVDA) demonstrates strong profitability, with a net income of $120,067 million and an impressive EBIT margin of approximately 62.4%. However, its EV/EBIT ratio of 34.1x suggests that the stock is valued significantly above the average range for large-cap stocks, indicating high investor expectations for future growth.

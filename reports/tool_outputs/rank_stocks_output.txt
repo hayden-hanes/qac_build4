@@ -1,0 +1,12 @@
+     Ticker                   Company  Market_Cap      EBIT          EV EV_EBIT
+Rank                                                                           
+1      NVAX               NOVAVAX INC   1092.5107   563.271    624.5987   1.11x
+2      CALM       CAL-MAINE FOODS INC   4652.0294  1551.436   3260.6764   2.10x
+3       PRU  PRUDENTIAL FINANCIAL INC  39275.9187  6598.000  13919.9187   2.11x
+4      UMBF        UMB FINANCIAL CORP   8738.5534  1330.065   3169.2044   2.38x
+5       OZK                  BANK OZK   5079.8257  1129.492   2882.2807   2.55x
+6      BPOP               POPULAR INC   8183.3299  1846.542   4734.9939   2.56x
+7       GNW    GENWORTH FINANCIAL INC   3538.2881   538.000   1480.2881   2.75x
+8        AX        AXOS FINANCIAL INC   4295.0434   858.414   2550.4764   2.97x
+9       HCI             HCI GROUP INC   2490.4365   440.431   1334.2255   3.03x
+10     WSFS       WSFS FINANCIAL CORP   2950.3684   544.078   1679.1844   3.09x
