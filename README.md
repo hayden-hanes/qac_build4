@@ -24,11 +24,13 @@ pip install -r requirements.txt
 
 Third, use this bash command to run the application: 
 
-python builds/build3_hitl_router_agent.py --data data/sixfirmlist.csv --report_dir reports --tags build3 --memory
+python builds/build4_rag_router_agent_faiss.py --data data/qac387_data.csv --report_dir reports --knowledge_dir knowledge --session_id cli-session --memory
 
 Fourth, interact with the AI agent by using commands of your choice. Note that your choice should be prefaced with "ask" or "tool". 
 
 Fifth, press (y/n) to approve code development or tool usage from the AI agent. 
+
+This version has RAG implemented and can inform the user about how the calculations are derived and why they are powerful. 
 
 ## Cautions for using the app 
 
