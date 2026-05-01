@@ -80,6 +80,162 @@ def rank_stocks(df, **kwargs):
     result["EV_EBIT"] = result["EV_EBIT"].map(lambda x: f"{x:.2f}x")
     return {"text": result.to_string(), "artifact_paths": []}
 
+def company_dashboard(df, ticker: str = None, **kwargs):
+    """
+    Generate a full metrics dashboard for a given company ticker.
+    Runs all scoring functions and EV/EBIT calculation, returning
+    a structured dict for rendering as an HTML dashboard.
+    """
+    if ticker is None:
+        return {"text": "Please provide a ticker symbol.", "artifact_paths": []}
+
+    ticker = ticker.upper()
+
+    company_df = df[df[TICKER].str.upper() == ticker]
+    if company_df.empty:
+        return {"text": f"No data found for ticker: {ticker}", "artifact_paths": []}
+
+    results = {}
+
+    # --- Valuation ---
+    ev_result = _ev_ebit_df(df)
+    company_ev = ev_result[ev_result[TICKER].str.upper() == ticker]
+    if not company_ev.empty:
+        row = company_ev.iloc[0]
+        results["ev_ebit"]    = round(float(row["EV_EBIT"]), 2)
+        results["market_cap"] = round(float(row[MKTCAP]), 0)
+        results["ebit"]       = round(float(row[EBIT]), 0)
+        results["company"]    = row[COMPANY]
+
+    # --- Quality scores ---
+    def _get_score_by_position(score_fn, col_index):
+        try:
+            out = score_fn(df)
+            text = out.get("text", "") if isinstance(out, dict) else str(out)
+            for line in text.splitlines():
+                parts = line.split()
+                if not parts or parts[0].upper() != ticker:
+                    continue
+                numeric_tokens = []
+                for tok in parts:
+                    try:
+                        float(tok)
+                        numeric_tokens.append(float(tok))
+                    except ValueError:
+                        continue
+                if numeric_tokens:
+                    idx = col_index if col_index >= 0 else len(numeric_tokens) + col_index
+                    if 0 <= idx < len(numeric_tokens):
+                        return round(numeric_tokens[idx], 4)
+            return None
+        except Exception as e:
+            print(f"  [_get_score warning] {e}")
+            return None
+
+    results["franchise_power"]    = _get_score_by_position(scoring.score_franchise_power,    3)
+    def _get_fs_percentile():
+        try:
+            out = scoring.score_financial_strength(df)
+            text = out.get("text", "") if isinstance(out, dict) else str(out)
+            scores = {}
+            for line in text.splitlines():
+                parts = line.split()
+                if not parts:
+                    continue
+                t = parts[0].upper()
+                nums = []
+                for tok in parts:
+                    try:
+                        nums.append(float(tok))
+                    except ValueError:
+                        continue
+                if nums:
+                    scores[t] = nums[0]
+            if ticker not in scores:
+                return None
+            all_vals = [v for v in scores.values() if v is not None]
+            ticker_val = scores[ticker]
+            pct = sum(1 for v in all_vals if v <= ticker_val) / len(all_vals)
+            return round(pct, 4)
+        except Exception as e:
+            print(f"  [_get_fs_percentile warning] {e}")
+            return None
+
+    results["financial_strength"] = _get_fs_percentile()
+    results["accruals"]           = _get_score_by_position(scoring.score_accruals,           -1)
+    results["beneish"]            = _get_score_by_position(scoring.score_beneish,            -1)
+    results["distress"]           = _get_score_by_position(scoring.score_distress,           -1)
+
+    fp = results["franchise_power"]
+    fs = results["financial_strength"]
+    if fp is not None and fs is not None:
+        results["quality"] = round(0.5 * fp + 0.5 * fs, 4)
+    else:
+        results["quality"] = None
+
+    # --- Analyst blurb ---
+    blurb_result = write_company_blurbs(company_df)
+    results["blurb"] = blurb_result.get("text", "")
+
+    # --- Rank within peer universe ---
+    ev_sorted = _ev_ebit_df(df).sort_values("EV_EBIT").reset_index(drop=True)
+    ev_sorted.index += 1
+    rank_match = ev_sorted[ev_sorted[TICKER].str.upper() == ticker]
+    results["ev_rank"]    = int(rank_match.index[0]) if not rank_match.empty else None
+    results["peer_count"] = len(ev_sorted)
+
+    # --- HTML output ---
+    import pathlib
+    out_dir = pathlib.Path("tool_outputs")
+    out_dir.mkdir(exist_ok=True)
+
+    score_keys = ["franchise_power", "financial_strength", "quality", "accruals", "beneish", "distress"]
+    invert_keys = {"beneish", "distress", "accruals"}
+    score_rows = ""
+    for k in score_keys:
+        v = results.get(k)
+        if v is not None:
+            pct = (1 - float(v)) * 100 if k in invert_keys else float(v) * 100
+            score_rows += f"<div class='s'><b>{k}</b>: {v}<div class='bar'><div class='fill' style='width:{pct:.0f}%'></div></div></div>"
+
+    html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
+<style>
+body {{ font-family: monospace; background: #0d0f14; color: #e8eaf0; padding: 40px; }}
+.s {{ margin: 8px 0; }}
+.bar {{ background: #333; height: 8px; border-radius: 4px; margin-top: 4px; }}
+.fill {{ height: 8px; border-radius: 4px; background: #4ade80; }}
+</style></head><body>
+<h1 style='color:#c8a96e'>{results.get('company', 'N/A')} ({ticker})</h1>
+<p>EV/EBIT: {results.get('ev_ebit', 'N/A')}x | Mkt Cap: ${results.get('market_cap', 0):,.0f}M | EBIT: ${results.get('ebit', 0):,.0f}M</p>
+<hr style='border-color:#333'>
+{score_rows}
+<hr style='border-color:#333'>
+<p style='color:#aaa'>{results.get('blurb', '')}</p>
+</body></html>"""
+
+    (out_dir / f"{ticker}_dashboard.html").write_text(html)
+    print(f"Dashboard saved: tool_outputs/{ticker}_dashboard.html")
+
+    lines = [
+        f"=== Dashboard: {results.get('company', ticker)} ({ticker}) ===",
+        f"EV/EBIT:           {results.get('ev_ebit', 'N/A')}x",
+        f"Market Cap:        ${results.get('market_cap', 0):,.0f}M",
+        f"EBIT:              ${results.get('ebit', 0):,.0f}M",
+        f"EV rank:           #{results.get('ev_rank', 'N/A')} of {results.get('peer_count', 'N/A')}",
+        "",
+        f"Franchise Power:   {results.get('franchise_power', 'N/A')}",
+        f"Fin. Strength:     {results.get('financial_strength', 'N/A')}",
+        f"Quality:           {results.get('quality', 'N/A')}",
+        f"Accruals:          {results.get('accruals', 'N/A')}",
+        f"Beneish (PMAN):    {results.get('beneish', 'N/A')}",
+        f"Distress (PFD):    {results.get('distress', 'N/A')}",
+        "",
+        "Blurb:",
+        results.get("blurb", ""),
+    ]
+
+    return {"text": "\n".join(lines), "data": results, "artifact_paths": []}
+
 def write_company_blurbs(df, **kwargs):
     """Write a 2-sentence analyst blurb for each company using the OpenAI API."""
     client = OpenAI()
@@ -127,6 +283,7 @@ TOOLS = {
     "plot_histograms": plotting.plot_histograms,
     "plot_bar_charts": plotting.plot_bar_charts,
     "plot_cat_num_boxplot": plotting.plot_cat_num_boxplot,
+    "company_dashboard": company_dashboard,
     # checks
     "assert_json_safe": checks.assert_json_safe,
     "target_check": checks.target_check,
@@ -154,7 +311,9 @@ TOOL_DESCRIPTIONS = {
     "score_beneish": "Beneish M-Score fraud probability (PMAN). Use for any request mentioning 'Beneish', 'M-score', 'fraud screen', or 'earnings manipulation'.",
     "score_distress": "Financial distress probability (PFD) from Campbell et al. Use for any request mentioning 'financial distress', 'PFD', 'bankruptcy', or 'distress score'.",
     "score_quality": "Final quality score combining franchise power and financial strength: QUALITY = 0.5 x P_FP + 0.5 x P_FS. Use for any request mentioning 'quality score', 'final score', or 'QUALITY'.",
+    "company_dashboard": "Renders a full metrics dashboard for a single company by ticker. Runs EV/EBIT, all quality/scoring functions, and generates an analyst blurb. Use when user asks to 'show a dashboard', 'summarize a company', or 'profile [TICKER]'."
 }
+
 
 
 
