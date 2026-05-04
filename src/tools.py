@@ -12,7 +12,7 @@ import src.modeling as modeling
 import src.plotting as plotting
 import src.profiling as profiling
 import src.summaries as summaries
-
+from typing import Optional
 # src/tools.py
 """
 def calc_ratio():
@@ -80,7 +80,7 @@ def rank_stocks(df, **kwargs):
     result["EV_EBIT"] = result["EV_EBIT"].map(lambda x: f"{x:.2f}x")
     return {"text": result.to_string(), "artifact_paths": []}
 
-def company_dashboard(df, ticker: str = None, **kwargs):
+def company_dashboard(df, ticker: Optional[str] = None, **kwargs):
     """
     Generate a full metrics dashboard for a given company ticker.
     Runs all scoring functions and EV/EBIT calculation, returning
@@ -234,7 +234,53 @@ body {{ font-family: monospace; background: #0d0f14; color: #e8eaf0; padding: 40
         results.get("blurb", ""),
     ]
 
-    return {"text": "\n".join(lines), "data": results, "artifact_paths": []}
+
+    html = f"""
+<div style="font-family: Arial, sans-serif; padding: 24px; background:#0d0f14; color:#e8eaf0; border-radius: 14px;">
+  <h1 style="color:#c8a96e; margin-bottom: 4px;">
+    {results.get("company", ticker)} ({ticker})
+  </h1>
+  <p style="color:#aaa;">Company financial dashboard</p>
+
+  <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px;">
+    <div style="background:#171a22; padding:16px; border-radius:12px;">
+      <div style="color:#aaa;">EV/EBIT</div>
+      <div style="font-size:28px; font-weight:bold;">{results.get("ev_ebit", "N/A")}x</div>
+    </div>
+    <div style="background:#171a22; padding:16px; border-radius:12px;">
+      <div style="color:#aaa;">Market Cap</div>
+      <div style="font-size:28px; font-weight:bold;">${results.get("market_cap", 0):,.0f}M</div>
+    </div>
+    <div style="background:#171a22; padding:16px; border-radius:12px;">
+      <div style="color:#aaa;">EBIT</div>
+      <div style="font-size:28px; font-weight:bold;">${results.get("ebit", 0):,.0f}M</div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:28px;">Quality & Risk Scores</h2>
+  <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Franchise Power: <b>{results.get("franchise_power", "N/A")}</b></div>
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Financial Strength: <b>{results.get("financial_strength", "N/A")}</b></div>
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Quality: <b>{results.get("quality", "N/A")}</b></div>
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Accruals: <b>{results.get("accruals", "N/A")}</b></div>
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Beneish PMAN: <b>{results.get("beneish", "N/A")}</b></div>
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Distress PFD: <b>{results.get("distress", "N/A")}</b></div>
+  </div>
+
+  <h2 style="margin-top:28px;">Analyst Blurb</h2>
+  <div style="background:#171a22; padding:16px; border-radius:12px; line-height:1.5;">
+    {results.get("blurb", "")}
+  </div>
+</div>
+"""
+    print("HTML LENGTH:", len(html))
+    
+    return {
+    "text": "\n".join(lines),
+    "html": html,  # THIS is the missing piece
+    "data": results,
+    "artifact_paths": [],
+}
 
 def write_company_blurbs(df, **kwargs):
     """Write a 2-sentence analyst blurb for each company using the OpenAI API."""
@@ -258,9 +304,53 @@ def write_company_blurbs(df, **kwargs):
             max_tokens=100,
             temperature=0.4,
         )
-        blurbs.append(f"[{row[TICKER]}] {row[COMPANY]}\n{response.choices[0].message.content.strip()}\n")
+        content = response.choices[0].message.content or ""
+        blurbs.append(f"[{row[TICKER]}] {row[COMPANY]}\n{content.strip()}\n")
  
     return {"text": "\n".join(blurbs), "artifact_paths": []}
+
+def rank_beneish_risk(df, top_n: int = 20, **kwargs):
+    """
+    Rank firms by highest Beneish earnings manipulation risk.
+    Uses score_beneish dataframe output and sorts by PMAN descending.
+    """
+    out = scoring.score_beneish(df)
+
+    if not isinstance(out, dict) or "dataframe" not in out:
+        return {
+            "text": "score_beneish did not return a dataframe. Update score_beneish first.",
+            "artifact_paths": [],
+        }
+
+    result = out["dataframe"].copy()
+
+    if "PMAN" not in result.columns:
+        return {
+            "text": "Beneish output did not include a PMAN column.",
+            "artifact_paths": [],
+        }
+
+    result["PMAN"] = pd.to_numeric(result["PMAN"], errors="coerce")
+    result["PROBM"] = pd.to_numeric(result["PROBM"], errors="coerce")
+
+    result = result.replace([float("inf"), float("-inf")], pd.NA)
+    result = result.dropna(subset=["PMAN"])
+    result = result.sort_values("PMAN", ascending=False).head(int(top_n))
+
+    lines = [
+        f"Top {top_n} firms by Beneish earnings manipulation risk",
+        "",
+        result.to_string(index=False),
+        "",
+        "Interpretation:",
+        "- Higher PMAN means higher estimated probability of earnings manipulation.",
+        "- This is a screening signal, not proof of fraud.",
+    ]
+
+    return {
+        "text": "\n".join(lines),
+        "artifact_paths": [],
+    }
  
 
 TOOLS = {
@@ -295,6 +385,7 @@ TOOLS = {
     "score_financial_strength": scoring.score_financial_strength,
     "score_accruals": scoring.score_accruals,
     "score_beneish": scoring.score_beneish,
+    "rank_beneish_risk": rank_beneish_risk,
     "score_distress": scoring.score_distress,
     "score_quality": scoring.score_quality,
 }
@@ -307,8 +398,9 @@ TOOL_DESCRIPTIONS = {
     "calculate_ev_ebit": "Calculate EV and EV/EBIT ratio for each company using their most recent fiscal year data.",
     "score_financial_strength": "Piotroski-style 10-point financial strength score (P_FS). Use for any request mentioning 'financial strength', 'FS score', or 'Piotroski'.",
     "score_franchise_power": "Computes 8-year geometric average ROA, ROC, and FCF/assets, ranked as franchise power (P_FP). Use for any request mentioning 'franchise power', 'FP score', 'ROA', or 'ROC'.",
+    "rank_beneish_risk": "Ranks firms by highest Beneish earnings manipulation risk using PMAN. Use when the user asks to identify high manipulation risk, fraud risk, or highest Beneish score firms.",
     "score_accruals": "Computes balance-sheet accruals and net operating accruals (COMBOACCRUAL). Use for any request mentioning 'accruals', 'accrual screen', 'STA', or 'SNOA'.",
-    "score_beneish": "Beneish M-Score fraud probability (PMAN). Use for any request mentioning 'Beneish', 'M-score', 'fraud screen', or 'earnings manipulation'.",
+    "score_beneish": "Computes Beneish M-Score fraud probability (PMAN) for all firms. Use when the user asks to calculate or display Beneish scores for the full dataset. If the user asks for high-risk firms, use rank_beneish_risk instead.",       
     "score_distress": "Financial distress probability (PFD) from Campbell et al. Use for any request mentioning 'financial distress', 'PFD', 'bankruptcy', or 'distress score'.",
     "score_quality": "Final quality score combining franchise power and financial strength: QUALITY = 0.5 x P_FP + 0.5 x P_FS. Use for any request mentioning 'quality score', 'final score', or 'QUALITY'.",
     "company_dashboard": "Renders a full metrics dashboard for a single company by ticker. Runs EV/EBIT, all quality/scoring functions, and generates an analyst blurb. Use when user asks to 'show a dashboard', 'summarize a company', or 'profile [TICKER]'."
