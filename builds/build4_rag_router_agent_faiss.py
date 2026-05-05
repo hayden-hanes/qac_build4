@@ -27,7 +27,7 @@ from the course repository.
 # You will also need to have built the RAG index by running the build_rag_index.py script before running the agent,
 
 To run the script:
-python3 builds/build4_rag_router_agent_faiss.py --data data/qac387_data.csv --report_dir reports --knowledge_dir knowledge --session_id cli-session --memory
+python builds/build4_rag_router_agent_faiss.py --data data/qac387_data.csv --report_dir reports --knowledge_dir knowledge --session_id cli-session --memory
 
 To stream LLM output, add the --stream flag to the command above
 
@@ -128,14 +128,17 @@ class RagIndex:
 def load_saved_rag_index(knowledge_dir: str | Path) -> RagIndex:
     """Load a previously built FAISS index and its chunk metadata."""
     knowledge_dir = Path(knowledge_dir)
-
-    index, chunks, embedding_model = load_rag_index(knowledge_dir)
-
+    # Match the file names created by build_rag_index.py
+    index_path = "rag_faiss.index"
+    meta_path = "rag_chunks.pkl"
+    
+    index, chunks = load_rag_index(index_path, meta_path)
+    
     return RagIndex(
         index=index,
         chunks=chunks,
         knowledge_dir=knowledge_dir,
-        embedding_model=embedding_model,
+        embedding_model="text-embedding-3-small", # Hardcode model since we know what we used
     )
 
 from openai import OpenAI
@@ -868,76 +871,105 @@ def build_router_chain(
     llm = ChatOpenAI(model=model, temperature=temperature, streaming=stream)
     allow_str = format_capability_hints(allowed_tools, tool_descriptions)
 
-    system_text = dedent(
-        """
-        You are a routing assistant for a Python data analysis agent.
+    system_text = dedent("""
+    You are a TOOL ROUTER for a data analysis CLI.
 
-        You must choose exactly one mode:
-        - tool: use an existing tool when a suitable tool already exists
-        - codegen: generate custom Python code when no suitable tool exists or the request is too specific
-        - answer: only for simple explanatory questions that do not require running analysis
+    You see:
+    - Dataset schema (columns + dtypes)
+    - Allow-list tools + tool signatures
+    - User request
 
-        You see:
-        - Dataset schema (columns + dtypes)
-        - Allow-list tools + descriptions
-        - Tool argument names by signature
-        - User request
+    Allow-list tools:
+    {allow_str}
 
-        Allow-list tools:
-        {allow_str}
+    Tool argument names by signature:
+    {tool_arg_hints}
 
-        Tool argument names by signature:
-        {tool_arg_hints}
+    Routing checklist (do this before producing JSON):
+    1) Does a tool in the allow-list clearly satisfy the request?
+       - If YES → mode="tool"
+       - If NO  → mode="codegen"
+    2) If mode="tool":
+       - pick the exact tool name from the allow-list
+       - extract referenced column names and verify they exist in the schema
+    3) Construct args:
+       - use parameter names from the tool signature hints
+       - include required parameters
+       - do NOT output an empty args object unless the tool truly takes no args
+    
+    The router should only include analysis parameters in args.
+    Filesystem paths, report directories, and session folders are handled by the runtime.
+    
+    Return ONLY valid JSON in exactly ONE of these forms.
 
-        GENERAL VS SPECIFIC REQUESTS:
-        - If the user's request is broad or exploratory, such as "analyze the data",
-          "what should I do first", or "what analyses make sense", prefer broad workflow guidance.
-        - If the user's request names a specific analysis, variable, model, table, or plot, treat it as specific.
-        - For specific requests, do not fall back to broad workflow guidance unless explicitly asked.
+    If you choose a tool:
+    ```json
+    {{"mode":"tool","tool":"plot_histograms","args":{{
+        "numeric_cols":["bill_length_mm","flipper_length_mm"]}},"note":"<brief>"}}
+    ```
 
-        CORE ROUTING RULES:
-        - Prefer tool mode for standard, repeatable analyses that match an available tool.
-        - Prefer codegen mode for custom analysis requests, unusual combinations, or outputs not covered by tools.
-        - Do not choose codegen if a tool clearly fits the request.
-        - Do not choose tool if no available tool can reasonably satisfy the request.
-        - Satisfy the user's exact request.
+    If no tool can satisfy the request:
+    ```json
+    {{"mode":"codegen","code_request":"<concrete coding request>","note":"<brief>"}}
+    ```
 
-        PLOT-SPECIFIC RULES:
-        - If an existing plotting tool clearly matches the request, choose tool mode.
-        - If no plotting tool clearly matches, choose codegen mode.
-        - For a request like "plot numeric_var by category_var", use a grouped plotting tool if available; otherwise choose codegen.
+Tool selection guidance (use tool mode when possible):
+    - Dataset overview -> basic_profile
+    - Missing data -> missingness_table or plot_missingness
+    - Categorical summaries / frequency tables -> summarize_categorical
+    - Numeric summaries -> summarize_numeric
+    - Correlations -> pearson_correlation or plot_corr_heatmap
+    - Histograms -> plot_histograms
+    - Bar charts (categorical counts) -> plot_bar_charts
+    - Categorical vs numeric boxplot -> plot_cat_num_boxplot
+    - Linear regression -> multiple_linear_regression
+    - Validate outcome/target column -> target_check
+    - EV/EBIT calculation -> calculate_ev_ebit
+    - Rank stocks by valuation (EV/EBIT) -> rank_stocks
+    - Generate company summaries -> write_company_blurbs
+    - Franchise power / ROA / ROC / 8-year returns -> score_franchise_power
+    - Financial strength / Piotroski / FS score -> score_financial_strength
+    - Accruals / accrual screen / STA / SNOA -> score_accruals
+    - Beneish / M-score / fraud screen / earnings manipulation -> score_beneish
+    - Financial distress / PFD / bankruptcy / distress score -> score_distress
+    - Quality score / final score / QUALITY -> score_quality
+    - Company dashboard / profile a ticker / show all metrics -> company_dashboard
+    - Final Quantitative Value screen: combines EBIT/EV cheapness percentile with QUALITY score --> rank_quantitative_value
+    - Top Reccomendations: completes the entire process and produces top 5 reccomendations --> top_recommendations
 
-        ARGUMENT RULES:
-        - Only use argument names that match the actual tool signature and tool description.
-        - Never invent argument names.
-        - Never pass precomputed objects unless the tool explicitly expects them.
-        - For plot_corr_heatmap, pass numeric_cols, not corr.
-        - Keep arguments minimal and directly tied to the request.
+    Tool-specific argument rules:
+    - summarize_categorical requires either:
+    - one column: args={{"column":"<col>"}}
+    - many columns: args={{"cat_cols":["<col1>","<col2>"]}}
 
-        Return exactly one JSON object.
+    Examples:
+    User: "frequency table for sex"
+    ```json
+    {{"mode":"tool","tool":"summarize_categorical","args":{{"column":"sex"}},"note":"Frequency table is a categorical summary."}}
+    ```
 
-        Tool mode example:
-        {{
-          "mode": "tool",
-          "tool": "summarize_categorical",
-          "args": {{"column": "sex"}},
-          "note": "A frequency table is a categorical summary."
-        }}
+    User: "frequency tables for sex and island"
+    ```json
+    {{"mode":"tool","tool":"summarize_categorical","args":{{"cat_cols":["sex","island"]}},"note":"Summarize multiple categorical columns."}}
+    ```
 
-        Codegen mode example:
-        {{
-          "mode": "codegen",
-          "code_request": "Create a boxplot of flipper_length_mm by species and save it.",
-          "note": "This is a specific grouped plot not clearly covered by one tool."
-        }}
-
-        Answer mode example:
-        {{
-          "mode": "answer",
-          "note": "This is a conceptual question that does not require running analysis."
-        }}
-        """
-    )
+    User: "show missingness"
+    ```json
+    {{"mode":"tool","tool":"missingness_table","args":{{}},"note":"Missingness summary is available as a tool."}}
+    ```
+    
+    User: "histograms for bill_length_mm and flipper_length_mm"
+    ```json
+    {{
+        "mode":"tool",
+    "tool":"plot_histograms",
+    "args":{{
+            "numeric_cols":["bill_length_mm","flipper_length_mm"]
+    }},
+    "note":"Histogram tool visualizes numeric distributions."
+    }}
+```
+""")
 
     prompt = ChatPromptTemplate.from_messages(
         [
