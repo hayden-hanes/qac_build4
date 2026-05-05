@@ -261,6 +261,119 @@ def write_company_blurbs(df, **kwargs):
         blurbs.append(f"[{row[TICKER]}] {row[COMPANY]}\n{response.choices[0].message.content.strip()}\n")
  
     return {"text": "\n".join(blurbs), "artifact_paths": []}
+
+
+def top_recommendations(df, top_n: int = 5, **kwargs):
+    """
+    Master Quantitative Value pipeline per Gray & Carlisle with step-by-step audit trail.
+      0. Full universe: positive EBIT, positive EV, mktcap >= $1B
+      1. Eliminate top 5% by COMBOACCRUAL (highest accruals)
+      2. Eliminate top 5% by PMAN (highest fraud probability)
+      3. Eliminate top 5% by PFD (highest distress probability)
+      4. Rank survivors by EBIT/EV cheapness (P_PRICE)
+      5. Rank survivors by QUALITY = 0.5 * P_FP + 0.5 * P_FS_norm (P_QUALITY)
+      6. FINAL_SCORE = average(P_PRICE, P_QUALITY)
+      7. Return top N stocks
+    """
+    lines = []
+
+    def _log(msg):
+        lines.append(msg)
+
+    # --- Step 0: Base universe ---
+    ev_df = _ev_ebit_df(df).copy()
+    ev_df = ev_df[
+        (ev_df["EV_EBIT"] >= 1.0) &
+        (ev_df[EBIT] > 0) &
+        (ev_df["EV"] > 0) &
+        (ev_df[MKTCAP] >= 1000)
+    ]
+    ev_df["EBIT_EV"] = 1 / ev_df["EV_EBIT"]
+
+    _log("=" * 60)
+    _log("QUANTITATIVE VALUE SCREENING — STEP-BY-STEP")
+    _log("=" * 60)
+    _log(f"\nStep 0 — Full universe (positive EBIT, EV > 0, mktcap >= $1B): {len(ev_df)} stocks")
+    _log("  " + ", ".join(sorted(ev_df[TICKER].tolist())))
+
+    # Merge all quality screens via compute_quality_score
+    quality_full = scoring.compute_quality_score(df)[
+        [TICKER, "COMBOACCRUAL", "PMAN", "PFD", "P_FP", "P_FS"]
+    ]
+    merged = ev_df.merge(quality_full, on=TICKER, how="inner")
+
+    # --- Step 1: Eliminate top 5% by COMBOACCRUAL ---
+    thresh_ac = merged["COMBOACCRUAL"].quantile(0.95)
+    removed = merged[merged["COMBOACCRUAL"] > thresh_ac][TICKER].tolist()
+    merged = merged[merged["COMBOACCRUAL"] <= thresh_ac]
+    _log(f"\nStep 1 — Eliminate top 5% COMBOACCRUAL (threshold={thresh_ac:.4f}): {len(merged)} stocks remain")
+    if removed:
+        _log(f"  Removed: {', '.join(removed)}")
+
+    # --- Step 2: Eliminate top 5% by PMAN (Beneish fraud probability) ---
+    thresh_pman = merged["PMAN"].quantile(0.95)
+    removed = merged[merged["PMAN"] > thresh_pman][TICKER].tolist()
+    merged = merged[merged["PMAN"] <= thresh_pman]
+    _log(f"\nStep 2 — Eliminate top 5% PMAN (threshold={thresh_pman:.4f}): {len(merged)} stocks remain")
+    if removed:
+        _log(f"  Removed: {', '.join(removed)}")
+
+    # --- Step 3: Eliminate top 5% by PFD (financial distress probability) ---
+    thresh_pfd = merged["PFD"].quantile(0.95)
+    removed = merged[merged["PFD"] > thresh_pfd][TICKER].tolist()
+    merged = merged[merged["PFD"] <= thresh_pfd]
+    _log(f"\nStep 3 — Eliminate top 5% PFD (threshold={thresh_pfd:.4f}): {len(merged)} stocks remain")
+    if removed:
+        _log(f"  Removed: {', '.join(removed)}")
+
+    # --- Step 4: Rank on EBIT/EV cheapness ---
+    merged["P_PRICE"] = merged["EBIT_EV"].rank(pct=True)
+    _log(f"\nStep 4 — Ranked {len(merged)} survivors by EBIT/EV cheapness (P_PRICE)")
+
+    # --- Step 5: Rank on QUALITY ---
+    merged["P_FS_norm"] = merged["P_FS"] / 10.0
+    merged["P_QUALITY"] = (0.5 * merged["P_FP"] + 0.5 * merged["P_FS_norm"]).rank(pct=True)
+    _log(f"\nStep 5 — Ranked {len(merged)} survivors by QUALITY (P_QUALITY)")
+
+    # --- Step 6: FINAL = average(P_PRICE, P_QUALITY) ---
+    merged["FINAL_SCORE"] = (merged["P_PRICE"] + merged["P_QUALITY"]) / 2
+    _log(f"\nStep 6 — FINAL_SCORE = average(P_PRICE, P_QUALITY)")
+
+    # --- Step 7: Top N ---
+    merged = merged.sort_values("FINAL_SCORE", ascending=False).head(top_n).reset_index(drop=True)
+    merged.index += 1
+    merged.index.name = "Rank"
+
+    result = merged[[
+        TICKER, COMPANY,
+        "EV_EBIT", "P_PRICE",
+        "P_FP", "P_FS", "P_QUALITY",
+        "COMBOACCRUAL", "PMAN", "PFD",
+        "FINAL_SCORE",
+    ]].rename(columns={
+        TICKER:         "Ticker",
+        COMPANY:        "Company",
+        "EV_EBIT":      "EV/EBIT",
+        "P_PRICE":      "Cheapness_%ile",
+        "P_FP":         "FranchisePower_%ile",
+        "P_FS":         "FinStrength_raw",
+        "P_QUALITY":    "Quality_%ile",
+        "COMBOACCRUAL": "Accrual_score",
+        "PMAN":         "Fraud_prob",
+        "PFD":          "Distress_prob",
+        "FINAL_SCORE":  "Final_Score",
+    })
+
+    _log(f"\nStep 7 — Top {top_n} stocks (buy list):")
+    _log(result.to_string())
+    _log("\n" + "=" * 60)
+
+    return {"text": "\n".join(lines), "artifact_paths": []}
+
+
+def rank_quantitative_value(df, top_n: int = 5, **kwargs):
+    """Delegates to top_recommendations — the master QV pipeline."""
+    return top_recommendations(df, top_n=top_n, **kwargs)
  
 
 TOOLS = {
@@ -297,6 +410,8 @@ TOOLS = {
     "score_beneish": scoring.score_beneish,
     "score_distress": scoring.score_distress,
     "score_quality": scoring.score_quality,
+    "rank_quantitative_value": rank_quantitative_value,
+    "top_recommendations": top_recommendations,
 }
 
 TOOL_DESCRIPTIONS = {
@@ -311,8 +426,11 @@ TOOL_DESCRIPTIONS = {
     "score_beneish": "Beneish M-Score fraud probability (PMAN). Use for any request mentioning 'Beneish', 'M-score', 'fraud screen', or 'earnings manipulation'.",
     "score_distress": "Financial distress probability (PFD) from Campbell et al. Use for any request mentioning 'financial distress', 'PFD', 'bankruptcy', or 'distress score'.",
     "score_quality": "Final quality score combining franchise power and financial strength: QUALITY = 0.5 x P_FP + 0.5 x P_FS. Use for any request mentioning 'quality score', 'final score', or 'QUALITY'.",
-    "company_dashboard": "Renders a full metrics dashboard for a single company by ticker. Runs EV/EBIT, all quality/scoring functions, and generates an analyst blurb. Use when user asks to 'show a dashboard', 'summarize a company', or 'profile [TICKER]'."
+    "company_dashboard": "Renders a full metrics dashboard for a single company by ticker. Runs EV/EBIT, all quality/scoring functions, and generates an analyst blurb. Use when user asks to 'show a dashboard', 'summarize a company', or 'profile [TICKER]'.",
+    "rank_quantitative_value": "Final Quantitative Value screen: combines EBIT/EV cheapness percentile with QUALITY score (franchise power + financial strength) to rank and return the top 5 stocks per the Gray & Carlisle methodology.",
+    "top_recommendations": "Full Quantitative Value pipeline: screens out manipulators, frauds, and distressed firms (top 5 percent each), then ranks survivors by combined cheapness (EBIT/EV) and quality (franchise power + financial strength) to return the top 5 stock recommendations per Gray & Carlisle."
 }
+
 
 
 
