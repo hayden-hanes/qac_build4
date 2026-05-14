@@ -379,6 +379,76 @@ def invoke_chain_text(
         print("\n" + out + "\n")
     return out
 
+def resolve_column_name(col: str, known_columns: set[str]) -> str:
+    """
+    Convert shorthand user column references like 'ni' or 'ebit'
+    into the exact dataset column name, without renaming the dataframe.
+    """
+    if col in known_columns:
+        return col
+
+    col_clean = col.lower().strip()
+
+    # Match WRDS-style code inside parentheses: "(ebit) Earnings..."
+    for real_col in known_columns:
+        real_clean = real_col.lower().strip()
+
+        if real_clean.startswith(f"({col_clean})"):
+            return real_col
+
+    # Match words contained in full name
+    for real_col in known_columns:
+        real_clean = real_col.lower().strip()
+
+        if col_clean in real_clean:
+            return real_col
+
+    return col
+
+def resolve_column_args(args_obj: Any, known_columns: set[str]) -> Any:
+    """
+    Walk through router/tool args and resolve column references
+    while preserving the original dataframe column names.
+    """
+    column_keys = {
+        "column",
+        "columns",
+        "col",
+        "cols",
+        "x",
+        "y",
+        "outcome",
+        "predictor",
+        "predictors",
+        "feature",
+        "features",
+        "target",
+        "groupby",
+        "numeric_cols",
+        "cat_cols",
+    }
+
+    def walk(obj: Any, key_hint: Optional[str] = None) -> Any:
+        key_l = (key_hint or "").lower()
+        expects_column = (
+            key_l in column_keys
+            or key_l.endswith("_col")
+            or key_l.endswith("_cols")
+        )
+
+        if isinstance(obj, dict):
+            return {k: walk(v, str(k)) for k, v in obj.items()}
+
+        if isinstance(obj, list):
+            return [walk(item, key_hint) for item in obj]
+
+        if isinstance(obj, str) and expects_column:
+            return resolve_column_name(obj, known_columns)
+
+        return obj
+
+    return walk(args_obj)
+
 
 def parse_json_object(raw: str) -> Dict[str, Any]:
     """
@@ -445,6 +515,7 @@ def find_unknown_columns(args_obj: Any, known_columns: set[str]) -> set[str]:
         "groupby",
     }
     unknown: set[str] = set()
+
 
     def walk(obj: Any, key_hint: Optional[str] = None) -> None:
         key_l = (key_hint or "").lower()
@@ -673,6 +744,72 @@ def build_codegen_chain(
     codegen_system_text = """
     You are a careful Python data analysis code generator.
 
+    - CRITICAL COLUMN RULE:
+    The dataset uses WRDS-style column names such as "(oancf) Operating Activities - Net Cash Flow".
+    Never use shorthand column names like "oancf", "capx", "ni", or "sale" directly in code.
+    If the user uses shorthand, resolve it to the exact schema column name before writing code.
+    Generated code must reference exact column names from the provided schema only.
+
+    - REQUIRED HELPER FUNCTION (must be included in every script):
+
+    def resolve_col(df, key):
+    key = key.lower().strip()
+    matches = []
+    for col in df.columns:
+        col_l = col.lower().strip()
+        if col_l == key:
+            return col
+        if col_l.startswith(f"({key})"):
+            return col
+        if key in col_l:
+            matches.append(col)
+    if len(matches) == 1:
+        return matches[0]
+    elif len(matches) > 1:
+        raise ValueError(f"Ambiguous column match for '{key}': {matches}")
+    raise ValueError(f"Could not resolve column: {key}")
+
+    - USAGE RULE:
+    For ANY column used in the analysis, first resolve it:
+
+        col_name = resolve_col(df, "<user term>")
+
+    Then use:
+
+        df[col_name]
+
+    This must be done for ALL columns used in the script.
+
+    - The model must NOT assume column names exist. It must always resolve them before use.
+
+    CRITICAL COLUMN SAFETY RULE (MANDATORY):
+
+    The dataset uses WRDS-style column names. You must NEVER hardcode column names such as:
+    "gvkey", "capx", "ni", "sale", "ebit", "oancf", etc.
+
+    ALL columns, including identifiers like gvkey, MUST be resolved dynamically using resolve_col().
+
+    This rule applies to:
+    - grouping keys (e.g., groupby)
+    - merges
+    - filters
+    - regression variables
+    - any dataframe access
+
+    INVALID EXAMPLES (DO NOT DO THIS):
+    df.groupby("gvkey")
+    df["capx"]
+    df["ni"]
+
+    VALID EXAMPLES (REQUIRED):
+    gvkey_col = resolve_col(df, "gvkey")
+    capx_col = resolve_col(df, "capx")
+
+    df.groupby(gvkey_col)
+    df[capx_col]
+
+    If you hardcode even ONE column name, the solution is incorrect.
+
     IMPORTANT RULES:
     - You ONLY know the dataset schema. Do NOT invent columns.
     - Produce ONE Python script that can run as a standalone file.
@@ -683,6 +820,19 @@ def build_codegen_chain(
       (4) If missing data are present, use listwise deletion unless specified otherwise.
       (5) save at least ONE artifact into --report_dir
       (6) validate referenced columns exist (exit nonzero if not)
+
+    COLUMN NAMING RULE:
+    - Do not assume or invent column names like 'capx', 'ni', 'sale', or 'oancf'.
+    - Always refer to variables conceptually (e.g., "capital expenditures", "operating cash flow").
+    - olumn resolution will be handled later in code generation.
+
+    For Enterprise Value, never resolve "total debt" as a single column. Use:
+    - long-term debt
+    - debt in current liabilities
+    - cash and short-term investments
+    - market value
+
+EV = market value + long-term debt + debt in current liabilities - cash
 
     OUTPUT FORMAT (exactly):
 
@@ -696,6 +846,10 @@ def build_codegen_chain(
 
     VERIFY:
     - ...brief verification checklist to ensure code correctness and validity...
+
+    The CODE section must contain exactly one fenced Python block:
+
+    If you do not use this exact fenced Python block format, the app will not be able to save or run the code.
     """
 
     if memory:
@@ -1125,7 +1279,13 @@ def traced_run_tool(
         print("Figures saved to:", tool_figure_dir)
         print()
 
-        return normalize_tool_return(tool_name, result)
+        raw_result = result
+        normalized = normalize_tool_return(tool_name, raw_result)
+
+        if isinstance(raw_result, dict) and "html" in raw_result:
+            setattr(normalized, "html", raw_result["html"])
+
+        return normalized
 
 
 # --------------------------------------------------------------------------------------
@@ -1185,7 +1345,11 @@ def do_tool_run_from_plan(
     """Run a validated tool plan directly (used by router to avoid a second LLM plan call)."""
     tool_name = plan.get("tool")
     tool_args = coerce_tool_args(plan.get("args", {}))
-    note = plan.get("note", "")
+
+    tool_args = resolve_column_args(tool_args, df_columns)
+    plan["args"] = tool_args
+
+    note = plan.get("note", "") 
 
     print(f"\n=== {title} ===")
     print(json.dumps(plan, indent=2))
@@ -1363,6 +1527,9 @@ def do_router(
     - recovers if the LLM forgets "mode" but clearly returned a tool/codegen shape
     - tolerates either "codegen_instructions" or older "code_request" naming
     """
+    
+    
+
     raw = traced_router(
         router_chain,
         router_prompt_obj,
@@ -1371,6 +1538,10 @@ def do_router(
         base_config,
         tags,
     )
+
+
+
+
     plan = parse_json_object(raw)
 
     if not plan:
@@ -1632,6 +1803,9 @@ def ui_run_tool_from_plan(
     tool_name = tool_name_raw
     tool_args = coerce_tool_args(plan.get("args", {}))
 
+    tool_args = resolve_column_args(tool_args, backend["df_columns"])
+    plan["args"] = tool_args
+
     if tool_name not in backend["tools"]:
         return {"ok": False, "error": f"Tool '{tool_name}' is not in the registry."}
 
@@ -1641,6 +1815,8 @@ def ui_run_tool_from_plan(
             "ok": False,
             "error": f"Unknown columns referenced: {', '.join(sorted(unknown_cols))}",
         }
+    
+
 
     try:
         res = traced_run_tool(
@@ -1666,13 +1842,14 @@ def ui_run_tool_from_plan(
     )
 
     return {
-        "ok": True,
-        "tool_name": tool_name,
-        "tool_args": tool_args,
-        "tool_text": res.text,
-        "summary": summary,
-        "artifact_paths": res.artifact_paths,
-        "output_txt": str(out_txt),
+    "ok": True,
+    "tool_name": tool_name,
+    "tool_args": tool_args,
+    "tool_text": res.text,
+    "summary": summary,
+    "artifact_paths": res.artifact_paths,
+    "output_txt": str(out_txt),
+    "html": getattr(res, "html", None),
     }
 
 

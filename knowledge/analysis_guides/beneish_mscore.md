@@ -1,5 +1,6 @@
 # Beneish M-Score — Fraud Screen
 
+
 ## What It Measures
 The Beneish M-Score is a statistical model that identifies the probability a company is manipulating its earnings. It was developed by Professor Messod Beneish in 1999. A higher score means a higher probability of earnings manipulation.
 

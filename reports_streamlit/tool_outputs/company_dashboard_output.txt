@@ -1,0 +1,16 @@
+=== Dashboard: MICROSOFT CORP (MSFT) ===
+EV/EBIT:           28.91x
+Market Cap:        $3,697,746M
+EBIT:              $128,528M
+EV rank:           #2544 of 2982
+
+Franchise Power:   0.9885
+Fin. Strength:     0.7075
+Quality:           0.848
+Accruals:          0.4844
+Beneish (PMAN):    0.0036
+Distress (PFD):    0.0
+
+Blurb:
+[MSFT] MICROSOFT CORP
+Microsoft Corp (MSFT) demonstrates strong profitability with a net income of $101,832 million and an EBIT of $128,528 million, reflecting its robust operational efficiency. However, with an EV/EBIT ratio of 28.9x, the company is valued above the average range for large-cap stocks, indicating that investors may be pricing in significant future growth expectations.

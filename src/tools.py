@@ -12,7 +12,7 @@ import src.modeling as modeling
 import src.plotting as plotting
 import src.profiling as profiling
 import src.summaries as summaries
-
+from typing import Optional
 # src/tools.py
 """
 def calc_ratio():
@@ -80,20 +80,46 @@ def rank_stocks(df, **kwargs):
     result["EV_EBIT"] = result["EV_EBIT"].map(lambda x: f"{x:.2f}x")
     return {"text": result.to_string(), "artifact_paths": []}
 
-def company_dashboard(df, ticker: str = None, **kwargs):
+def company_dashboard(df, ticker: Optional[str] = None, company: Optional[str] = None, **kwargs):
     """
     Generate a full metrics dashboard for a given company ticker.
-    Runs all scoring functions and EV/EBIT calculation, returning
-    a structured dict for rendering as an HTML dashboard.
+    Supports both ticker and company name input.
     """
-    if ticker is None:
-        return {"text": "Please provide a ticker symbol.", "artifact_paths": []}
 
-    ticker = ticker.upper()
+    company_df = pd.DataFrame()
 
-    company_df = df[df[TICKER].str.upper() == ticker]
+    # --- 1. Try ticker first ---
+    if ticker is not None:
+        ticker = str(ticker).strip().upper()
+        company_df = df[df[TICKER].astype(str).str.strip().str.upper() == ticker]
+
+    # --- 2. If ticker failed OR not provided, try company name ---
+    if company_df.empty and company is not None:
+        company_query = str(company).strip().lower()
+
+        match = df[df[COMPANY].astype(str).str.strip().str.lower() == company_query]
+
+        if match.empty:
+            match = df[
+                df[COMPANY]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .str.contains(company_query, na=False, regex=False)
+            ]
+
+        if not match.empty:
+            ticker = str(match.iloc[0][TICKER]).strip().upper()
+            company_df = df[df[TICKER].astype(str).str.strip().str.upper() == ticker]
+        else:
+            return {"text": f"Could not find company: {company}", "artifact_paths": []}
+
+    # --- 3. Final fail ---
     if company_df.empty:
-        return {"text": f"No data found for ticker: {ticker}", "artifact_paths": []}
+        return {
+            "text": f"No company data found. ticker={ticker}, company={company}",
+            "artifact_paths": [],
+        }
 
     results = {}
 
@@ -234,7 +260,53 @@ body {{ font-family: monospace; background: #0d0f14; color: #e8eaf0; padding: 40
         results.get("blurb", ""),
     ]
 
-    return {"text": "\n".join(lines), "data": results, "artifact_paths": []}
+
+    html = f"""
+<div style="font-family: Arial, sans-serif; padding: 24px; background:#0d0f14; color:#e8eaf0; border-radius: 14px;">
+  <h1 style="color:#c8a96e; margin-bottom: 4px;">
+    {results.get("company", ticker)} ({ticker})
+  </h1>
+  <p style="color:#aaa;">Company financial dashboard</p>
+
+  <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px;">
+    <div style="background:#171a22; padding:16px; border-radius:12px;">
+      <div style="color:#aaa;">EV/EBIT</div>
+      <div style="font-size:28px; font-weight:bold;">{results.get("ev_ebit", "N/A")}x</div>
+    </div>
+    <div style="background:#171a22; padding:16px; border-radius:12px;">
+      <div style="color:#aaa;">Market Cap</div>
+      <div style="font-size:28px; font-weight:bold;">${results.get("market_cap", 0):,.0f}M</div>
+    </div>
+    <div style="background:#171a22; padding:16px; border-radius:12px;">
+      <div style="color:#aaa;">EBIT</div>
+      <div style="font-size:28px; font-weight:bold;">${results.get("ebit", 0):,.0f}M</div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:28px;">Quality & Risk Scores</h2>
+  <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Franchise Power: <b>{results.get("franchise_power", "N/A")}</b></div>
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Financial Strength: <b>{results.get("financial_strength", "N/A")}</b></div>
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Quality: <b>{results.get("quality", "N/A")}</b></div>
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Accruals: <b>{results.get("accruals", "N/A")}</b></div>
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Beneish PMAN: <b>{results.get("beneish", "N/A")}</b></div>
+    <div style="background:#171a22; padding:14px; border-radius:12px;">Distress PFD: <b>{results.get("distress", "N/A")}</b></div>
+  </div>
+
+  <h2 style="margin-top:28px;">Analyst Blurb</h2>
+  <div style="background:#171a22; padding:16px; border-radius:12px; line-height:1.5;">
+    {results.get("blurb", "")}
+  </div>
+</div>
+"""
+    print("HTML LENGTH:", len(html))
+    
+    return {
+    "text": "\n".join(lines),
+    "html": html,  # THIS is the missing piece
+    "data": results,
+    "artifact_paths": [],
+}
 
 def write_company_blurbs(df, **kwargs):
     """Write a 2-sentence analyst blurb for each company using the OpenAI API."""
@@ -258,9 +330,199 @@ def write_company_blurbs(df, **kwargs):
             max_tokens=100,
             temperature=0.4,
         )
-        blurbs.append(f"[{row[TICKER]}] {row[COMPANY]}\n{response.choices[0].message.content.strip()}\n")
+        content = response.choices[0].message.content or ""
+        blurbs.append(f"[{row[TICKER]}] {row[COMPANY]}\n{content.strip()}\n")
  
     return {"text": "\n".join(blurbs), "artifact_paths": []}
+
+
+def top_recommendations(df, top_n: int = 5, **kwargs):
+    top_n = int(top_n)
+    """
+    Master Quantitative Value pipeline per Gray & Carlisle with step-by-step audit trail.
+      0. Full universe: positive EBIT, positive EV, mktcap >= $1B
+      1. Eliminate top 5% by COMBOACCRUAL (highest accruals)
+      2. Eliminate top 5% by PMAN (highest fraud probability)
+      3. Eliminate top 5% by PFD (highest distress probability)
+      4. Rank survivors by EBIT/EV cheapness (P_PRICE)
+      5. Rank survivors by QUALITY = 0.5 * P_FP + 0.5 * P_FS_norm (P_QUALITY)
+      6. FINAL_SCORE = average(P_PRICE, P_QUALITY)
+      7. Return top N stocks
+    """
+    lines = []
+
+    def _log(msg):
+        lines.append(msg)
+
+    # --- Step 0: Base universe ---
+    ev_df = _ev_ebit_df(df).copy()
+    ev_df = ev_df[
+        (ev_df["EV_EBIT"] >= 1.0) &
+        (ev_df[EBIT] > 0) &
+        (ev_df["EV"] > 0) &
+        (ev_df[MKTCAP] >= 1000)
+    ]
+    ev_df["EBIT_EV"] = 1 / ev_df["EV_EBIT"]
+
+    _log("=" * 60)
+    _log("QUANTITATIVE VALUE SCREENING — STEP-BY-STEP")
+    _log("=" * 60)
+    _log(f"\nStep 0 — Initial eligible universe: {len(ev_df)} stocks")
+    _log("Filters: positive EBIT, positive EV, market cap >= $1B")  
+
+    # Merge all quality screens via compute_quality_score
+    quality_full = scoring.compute_quality_score(df)[
+        [TICKER, "COMBOACCRUAL", "PMAN", "PFD", "P_FP", "P_FS"]
+    ]
+    merged = ev_df.merge(quality_full, on=TICKER, how="inner")
+
+    # --- Step 1: Eliminate top 5% by COMBOACCRUAL ---
+    thresh_ac = merged["COMBOACCRUAL"].quantile(0.95)
+    removed = merged[merged["COMBOACCRUAL"] > thresh_ac][TICKER].tolist()
+    merged = merged[merged["COMBOACCRUAL"] <= thresh_ac]
+    _log(f"\nStep 1 — Eliminate top 5% COMBOACCRUAL (threshold={thresh_ac:.4f}): {len(merged)} stocks remain")
+    if removed:
+        _log(f"  Removed: {', '.join(removed)}")
+
+    # --- Step 2: Eliminate top 5% by PMAN (Beneish fraud probability) ---
+    thresh_pman = merged["PMAN"].quantile(0.95)
+    removed = merged[merged["PMAN"] > thresh_pman][TICKER].tolist()
+    merged = merged[merged["PMAN"] <= thresh_pman]
+    _log(f"\nStep 2 — Eliminate top 5% PMAN (threshold={thresh_pman:.4f}): {len(merged)} stocks remain")
+    if removed:
+        _log(f"  Removed: {', '.join(removed)}")
+
+    # --- Step 3: Eliminate top 5% by PFD (financial distress probability) ---
+    thresh_pfd = merged["PFD"].quantile(0.95)
+    removed = merged[merged["PFD"] > thresh_pfd][TICKER].tolist()
+    merged = merged[merged["PFD"] <= thresh_pfd]
+    _log(f"\nStep 3 — Eliminate top 5% PFD (threshold={thresh_pfd:.4f}): {len(merged)} stocks remain")
+    if removed:
+        _log(f"  Removed: {', '.join(removed)}")
+
+    # --- Step 4: Rank on EBIT/EV cheapness ---
+    merged["P_PRICE"] = merged["EBIT_EV"].rank(pct=True)
+    _log(f"\nStep 4 — Ranked {len(merged)} survivors by EBIT/EV cheapness (P_PRICE)")
+
+    # --- Step 5: Rank on QUALITY ---
+    merged["P_FS_norm"] = merged["P_FS"] / 10.0
+    merged["P_QUALITY"] = (0.5 * merged["P_FP"] + 0.5 * merged["P_FS_norm"]).rank(pct=True)
+    _log(f"\nStep 5 — Ranked {len(merged)} survivors by QUALITY (P_QUALITY)")
+
+    # --- Step 6: FINAL = average(P_PRICE, P_QUALITY) ---
+    merged["FINAL_SCORE"] = (merged["P_PRICE"] + merged["P_QUALITY"]) / 2
+    _log(f"\nStep 6 — FINAL_SCORE = average(P_PRICE, P_QUALITY)")
+
+    # --- Step 7: Top N ---
+    merged = merged.sort_values("FINAL_SCORE", ascending=False).head(top_n).reset_index(drop=True)
+    merged.index += 1
+    merged.index.name = "Rank"
+
+    result = merged[[
+        TICKER, COMPANY,
+        "EV_EBIT", "P_PRICE",
+        "P_FP", "P_FS", "P_QUALITY",
+        "COMBOACCRUAL", "PMAN", "PFD",
+        "FINAL_SCORE",
+    ]].rename(columns={
+        TICKER:         "Ticker",
+        COMPANY:        "Company",
+        "EV_EBIT":      "EV/EBIT",
+        "P_PRICE":      "Cheapness_%ile",
+        "P_FP":         "FranchisePower_%ile",
+        "P_FS":         "FinStrength_raw",
+        "P_QUALITY":    "Quality_%ile",
+        "COMBOACCRUAL": "Accrual_score",
+        "PMAN":         "Fraud_prob",
+        "PFD":          "Distress_prob",
+        "FINAL_SCORE":  "Final_Score",
+    })
+
+    # --- Clean display formatting ---
+    display = result.copy()
+
+    display["EV/EBIT"] = display["EV/EBIT"].map(lambda x: f"{x:.2f}x")
+    display["Cheapness_%ile"] = display["Cheapness_%ile"].map(lambda x: f"{x:.1%}")
+    display["FranchisePower_%ile"] = display["FranchisePower_%ile"].map(lambda x: f"{x:.1%}")
+    display["Quality_%ile"] = display["Quality_%ile"].map(lambda x: f"{x:.1%}")
+    display["Accrual_score"] = display["Accrual_score"].map(lambda x: f"{x:.3f}")
+    display["Fraud_prob"] = display["Fraud_prob"].map(lambda x: f"{x:.3f}")
+    display["Distress_prob"] = display["Distress_prob"].map(lambda x: f"{x:.3f}")
+    display["Final_Score"] = display["Final_Score"].map(lambda x: f"{x:.1%}")
+
+    _log(f"\nFinal Top {top_n} Quantitative Value Recommendations:")
+    _log(display.to_string(index=True))
+
+    _log("\nKey Results:")
+    for rank, row in display.reset_index().iterrows():
+        _log(
+        f"{rank + 1}. {row['Ticker']} - {row['Company']} | "
+        f"EV/EBIT: {row['EV/EBIT']} | "
+        f"Final Score: {row['Final_Score']} | "
+        f"Cheapness: {row['Cheapness_%ile']} | "
+        f"Quality: {row['Quality_%ile']} | "
+        f"Fraud Risk: {row['Fraud_prob']} | "
+        f"Distress Risk: {row['Distress_prob']}"
+    )
+
+    _log("\n" + "=" * 60)
+
+    return {
+    "text": "\n".join(lines),
+    "dataframe": result,
+    "artifact_paths": [],
+}
+
+
+def rank_quantitative_value(df, top_n: int = 5, **kwargs):
+    """Delegates to top_recommendations — the master QV pipeline."""
+    return top_recommendations(df, top_n=top_n, **kwargs)
+
+
+
+
+def rank_beneish_risk(df, top_n: int = 20, **kwargs):
+    """
+    Rank firms by highest Beneish earnings manipulation risk.
+    Uses score_beneish dataframe output and sorts by PMAN descending.
+    """
+    out = scoring.score_beneish(df)
+
+    if not isinstance(out, dict) or "dataframe" not in out:
+        return {
+            "text": "score_beneish did not return a dataframe. Update score_beneish first.",
+            "artifact_paths": [],
+        }
+
+    result = out["dataframe"].copy()
+
+    if "PMAN" not in result.columns:
+        return {
+            "text": "Beneish output did not include a PMAN column.",
+            "artifact_paths": [],
+        }
+
+    result["PMAN"] = pd.to_numeric(result["PMAN"], errors="coerce")
+    result["PROBM"] = pd.to_numeric(result["PROBM"], errors="coerce")
+
+    result = result.replace([float("inf"), float("-inf")], pd.NA)
+    result = result.dropna(subset=["PMAN"])
+    result = result.sort_values("PMAN", ascending=False).head(int(top_n))
+
+    lines = [
+        f"Top {top_n} firms by Beneish earnings manipulation risk",
+        "",
+        result.to_string(index=False),
+        "",
+        "Interpretation:",
+        "- Higher PMAN means higher estimated probability of earnings manipulation.",
+        "- This is a screening signal, not proof of fraud.",
+    ]
+
+    return {
+        "text": "\n".join(lines),
+        "artifact_paths": [],
+    }
  
 
 TOOLS = {
@@ -295,8 +557,11 @@ TOOLS = {
     "score_financial_strength": scoring.score_financial_strength,
     "score_accruals": scoring.score_accruals,
     "score_beneish": scoring.score_beneish,
+    "rank_beneish_risk": rank_beneish_risk,
     "score_distress": scoring.score_distress,
     "score_quality": scoring.score_quality,
+    "rank_quantitative_value": rank_quantitative_value,
+    "top_recommendations": top_recommendations,
 }
 
 TOOL_DESCRIPTIONS = {
@@ -307,13 +572,12 @@ TOOL_DESCRIPTIONS = {
     "calculate_ev_ebit": "Calculate EV and EV/EBIT ratio for each company using their most recent fiscal year data.",
     "score_financial_strength": "Piotroski-style 10-point financial strength score (P_FS). Use for any request mentioning 'financial strength', 'FS score', or 'Piotroski'.",
     "score_franchise_power": "Computes 8-year geometric average ROA, ROC, and FCF/assets, ranked as franchise power (P_FP). Use for any request mentioning 'franchise power', 'FP score', 'ROA', or 'ROC'.",
+    "rank_beneish_risk": "Ranks firms by highest Beneish earnings manipulation risk using PMAN. Use when the user asks to identify high manipulation risk, fraud risk, or highest Beneish score firms.",
     "score_accruals": "Computes balance-sheet accruals and net operating accruals (COMBOACCRUAL). Use for any request mentioning 'accruals', 'accrual screen', 'STA', or 'SNOA'.",
-    "score_beneish": "Beneish M-Score fraud probability (PMAN). Use for any request mentioning 'Beneish', 'M-score', 'fraud screen', or 'earnings manipulation'.",
+    "score_beneish": "Computes Beneish M-Score fraud probability (PMAN) for all firms. Use when the user asks to calculate or display Beneish scores for the full dataset. If the user asks for high-risk firms, use rank_beneish_risk instead.",       
     "score_distress": "Financial distress probability (PFD) from Campbell et al. Use for any request mentioning 'financial distress', 'PFD', 'bankruptcy', or 'distress score'.",
     "score_quality": "Final quality score combining franchise power and financial strength: QUALITY = 0.5 x P_FP + 0.5 x P_FS. Use for any request mentioning 'quality score', 'final score', or 'QUALITY'.",
-    "company_dashboard": "Renders a full metrics dashboard for a single company by ticker. Runs EV/EBIT, all quality/scoring functions, and generates an analyst blurb. Use when user asks to 'show a dashboard', 'summarize a company', or 'profile [TICKER]'."
+    "company_dashboard": "Renders a full metrics dashboard for a single company. Accepts either ticker or company name. Use ticker if known; otherwise pass company name."    "rank_quantitative_value" "Final Quantitative Value screen: combines EBIT/EV cheapness percentile with QUALITY score (franchise power + financial strength) to rank and return the top 5 stocks per the Gray & Carlisle methodology.",
+    "top_recommendations": "Full Quantitative Value pipeline: screens out manipulators, frauds, and distressed firms (top 5 percent each), then ranks survivors by combined cheapness (EBIT/EV) and quality (franchise power + financial strength) to return the top 5 stock recommendations per Gray & Carlisle."
 }
-
-
-
 

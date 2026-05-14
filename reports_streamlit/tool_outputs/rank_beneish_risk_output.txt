@@ -1,0 +1,27 @@
+Top 20 firms by Beneish earnings manipulation risk
+
+(tic) Ticker Symbol          (conm) Company Name    PROBM     PMAN
+               WATT                ENERGOUS CORP 5.000000 1.000000
+               VRCA       VERRICA PHARMACEUTICAL 4.493981 0.999997
+               SNGX                SOLIGENIX INC 3.762865 0.999916
+               DVLT             DATAVAULT AI INC 3.268961 0.999460
+                 WW         WW INTERNATIONAL INC 2.622296 0.995633
+               ELUT                   ELUTIA INC 2.593135 0.995245
+               APVO      APTEVO THERAPEUTICS INC 2.497510 0.993747
+                JEF  JEFFERIES FINANCIAL GRP INC 2.360956 0.990886
+               LEDS                SEMILEDS CORP 2.148238 0.984153
+               RIGL    RIGEL PHARMACEUTICALS INC 1.694755 0.954939
+                QXO                      QXO INC 1.674800 0.953013
+               ZVRA       ZEVRA THERAPEUTICS INC 1.570945 0.941902
+                SER      SERINA THERAPEUTICS INC 1.330860 0.908382
+                VHC         VIRNETX HOLDING CORP 1.321386 0.906814
+               LQDA                LIQUIDIA CORP 1.277565 0.899299
+               BRFH      BARFRESH FOOD GROUP INC 1.079198 0.859750
+               FKWL       FRANKLIN WIRELESS CORP 1.078298 0.859550
+               WRAP            WRAP TECHNOLOGIES 1.038973 0.850591
+               AREN ARENA GROUP HLDNGS INC (THE) 0.879799 0.810516
+               CHRS         COHERUS ONCOLOGY INC 0.687398 0.754084
+
+Interpretation:
+- Higher PMAN means higher estimated probability of earnings manipulation.
+- This is a screening signal, not proof of fraud.

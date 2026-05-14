@@ -41,7 +41,12 @@ def multiple_linear_regression(
     if not terms:
         raise ValueError("No predictors provided after processing.")
 
-    formula = f"{outcome} ~ " + " + ".join(terms)
+    def patsy_safe(col: str) -> str:
+        escaped = col.replace('"', '\\"')
+        return f'Q("{escaped}")'
+
+    formula = f"{patsy_safe(outcome)} ~ " + " + ".join(
+        patsy_safe(p) for p in predictors)
 
     model_df = df[[outcome] + predictors].dropna()
     if model_df.shape[0] < 3:

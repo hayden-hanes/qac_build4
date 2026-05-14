@@ -1,0 +1,16 @@
+=== Dashboard: APPLE INC (AAPL) ===
+EV/EBIT:           28.71x
+Market Cap:        $3,761,715M
+EBIT:              $133,050M
+EV rank:           #2540 of 2982
+
+Franchise Power:   0.9982
+Fin. Strength:     0.9556
+Quality:           0.9769
+Accruals:          0.7746
+Beneish (PMAN):    0.0081
+Distress (PFD):    0.0
+
+Blurb:
+[AAPL] APPLE INC
+Apple Inc. demonstrates strong profitability with a net income of $112,010 million, resulting in a robust EBIT margin of approximately 32%. However, its EV/EBIT ratio of 28.7x indicates that the stock is valued at a premium compared to the average range of 15-25x typically seen for large-cap stocks.
