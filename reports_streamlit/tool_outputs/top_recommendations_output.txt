@@ -1,0 +1,39 @@
+============================================================
+QUANTITATIVE VALUE SCREENING — STEP-BY-STEP
+============================================================
+
+Step 0 — Initial eligible universe: 1458 stocks
+Filters: positive EBIT, positive EV, market cap >= $1B
+
+Step 1 — Eliminate top 5% COMBOACCRUAL (threshold=0.7849): 1385 stocks remain
+  Removed: ADSK, AFG, AIG, AIZ, ALLY, AMP, APO, AX, AXP, BANC, BLKB, C, CAH, CBSH, CCB, CFR, CHWY, CNO, COF, COR, CPAY, CPNG, DBX, DELL, DOCU, ELME, EQH, EXPE, EXTR, FBK, FG, FIBK, FITB, FNF, GDDY, GTX, HCI, HPQ, HRB, JBL, LC, LOB, LUV, LYFT, LYV, MCK, MCY, MEDP, MET, MTB, NBHC, OBK, OFG, OTIS, PANW, PBI, PGR, PJT, RJF, ROOT, SCHW, SNEX, SSB, STEL, SYF, TCBI, TDC, TENB, TOWN, UMBF, VRSN, W, WSFS
+
+Step 2 — Eliminate top 5% PMAN (threshold=0.0276): 913 stocks remain
+  Removed: AAON, ACAD, ACLS, ADMA, ALNY, APPF, AVGO, BCRX, BWA, CDE, CPRX, DKL, DKS, EBAY, EXE, FLR, FOUR, FWONK, GEF, GEO, HL, HNI, INSP, JBTM, JEF, KTB, KTOS, LLY, LNG, NVAX, NVDA, PAA, PAYC, PLTR, PSIX, PTCT, QXO, RH, RVLV, SFM, SHLS, STRL, SYY, THRM, TKO, TTMI, UI, VMC, VMI
+
+Step 3 — Eliminate top 5% PFD (threshold=0.0000): 867 stocks remain
+  Removed: ABTC, ACHC, AHCO, AMRX, APPN, ASH, AVAH, BKD, BLFS, BV, BWIN, CALY, CCO, CLMT, CTOS, DCO, DK, DLX, DOCN, DSGR, ENOV, FUN, GEL, GLP, GT, MLKN, MTD, NEOG, NPKI, NVRI, NWL, PAHC, PENN, PTON, QDEL, SBGI, SGRY, SMG, SPH, UCTT, UNFI, USAC, WINA, WKC, WTTR, XRAY
+
+Step 4 — Ranked 867 survivors by EBIT/EV cheapness (P_PRICE)
+
+Step 5 — Ranked 867 survivors by QUALITY (P_QUALITY)
+
+Step 6 — FINAL_SCORE = average(P_PRICE, P_QUALITY)
+
+Final Top 5 Quantitative Value Recommendations:
+     Ticker                     Company EV/EBIT Cheapness_%ile FranchisePower_%ile  FinStrength_raw Quality_%ile Accrual_score Fraud_prob Distress_prob Final_Score
+Rank                                                                                                                                                               
+1      FOXA                    FOX CORP   8.08x          96.4%               90.0%                8        97.2%         0.360      0.005         0.000       96.8%
+2      CALM         CAL-MAINE FOODS INC   2.10x         100.0%               90.4%                7        92.7%         0.379      0.007         0.000       96.3%
+3        CF  CF INDUSTRIES HOLDINGS INC   5.67x          98.8%               93.1%                7        93.7%         0.520      0.003         0.000       96.3%
+4      CTRA          COTERRA ENERGY INC   9.70x          90.9%               93.8%                8        98.0%         0.544      0.007         0.000       94.4%
+5       KFY                  KORN FERRY   7.47x          97.2%               88.2%                7        90.2%         0.499      0.004         0.000       93.7%
+
+Key Results:
+1. FOXA - FOX CORP | EV/EBIT: 8.08x | Final Score: 96.8% | Cheapness: 96.4% | Quality: 97.2% | Fraud Risk: 0.005 | Distress Risk: 0.000
+2. CALM - CAL-MAINE FOODS INC | EV/EBIT: 2.10x | Final Score: 96.3% | Cheapness: 100.0% | Quality: 92.7% | Fraud Risk: 0.007 | Distress Risk: 0.000
+3. CF - CF INDUSTRIES HOLDINGS INC | EV/EBIT: 5.67x | Final Score: 96.3% | Cheapness: 98.8% | Quality: 93.7% | Fraud Risk: 0.003 | Distress Risk: 0.000
+4. CTRA - COTERRA ENERGY INC | EV/EBIT: 9.70x | Final Score: 94.4% | Cheapness: 90.9% | Quality: 98.0% | Fraud Risk: 0.007 | Distress Risk: 0.000
+5. KFY - KORN FERRY | EV/EBIT: 7.47x | Final Score: 93.7% | Cheapness: 97.2% | Quality: 90.2% | Fraud Risk: 0.004 | Distress Risk: 0.000
+
+============================================================

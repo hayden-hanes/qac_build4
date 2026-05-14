@@ -438,7 +438,7 @@ if backend is not None:
                             if tool_run_res.get("html"):
                                 components.html(tool_run_res["html"], height=700, scrolling=True)
                             else: 
-                                st.warning("No HTML dashboard was returned by this tool.")
+                                st.warning("")
 
                             st.write("**Summary**")
                             st.markdown(tool_run_res["summary"])
@@ -579,7 +579,7 @@ if backend is not None:
                     if tool_run_res.get("html"):
                         components.html(tool_run_res["html"], height=700, scrolling=True)
                     else:
-                        st.warning("No HTML dashboard was returned.")
+                        st.warning("")
 
                     st.write("**Summary**")
                     st.markdown(tool_run_res["summary"])

@@ -1,16 +1,16 @@
-=== Dashboard: APPLE INC (AAPL) ===
-EV/EBIT:           28.71x
-Market Cap:        $3,761,715M
-EBIT:              $133,050M
-EV rank:           #2540 of 2982
+=== Dashboard: MICROSOFT CORP (MSFT) ===
+EV/EBIT:           28.91x
+Market Cap:        $3,697,746M
+EBIT:              $128,528M
+EV rank:           #2544 of 2982
 
-Franchise Power:   0.9982
-Fin. Strength:     0.9556
-Quality:           0.9769
-Accruals:          0.7746
-Beneish (PMAN):    0.0081
+Franchise Power:   0.9885
+Fin. Strength:     0.7075
+Quality:           0.848
+Accruals:          0.4844
+Beneish (PMAN):    0.0036
 Distress (PFD):    0.0
 
 Blurb:
-[AAPL] APPLE INC
-Apple Inc. (AAPL) demonstrates strong profitability with a net income of $112,010 million and an EBIT of $133,050 million, reflecting its ability to generate substantial earnings from its operations. However, with an EV/EBIT ratio of 28.7x, Apple is valued above the average range for large-cap stocks, indicating that investors may be pricing in significant growth expectations.
+[MSFT] MICROSOFT CORP
+Microsoft Corp (MSFT) demonstrates strong profitability with a net income of $101,832 million and an EBIT of $128,528 million, reflecting its robust operational efficiency. However, with an EV/EBIT ratio of 28.9x, the company is valued above the average range for large-cap stocks, indicating that investors may be pricing in significant future growth expectations.

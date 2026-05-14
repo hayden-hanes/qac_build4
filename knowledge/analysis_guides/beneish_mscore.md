@@ -1,5 +1,3 @@
-BENEISH_TEST_PHRASE_12345
-
 # Beneish M-Score — Fraud Screen
 
 
