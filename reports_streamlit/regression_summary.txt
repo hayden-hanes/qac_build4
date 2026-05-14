@@ -1,0 +1,27 @@
+                                         OLS Regression Results                                         
+========================================================================================================
+Dep. Variable:     (oancf) Operating Activities - Net Cash Flow   R-squared:                       0.503
+Model:                                                      OLS   Adj. R-squared:                  0.503
+Method:                                           Least Squares   F-statistic:                 4.266e+04
+Date:                                          Mon, 04 May 2026   Prob (F-statistic):               0.00
+Time:                                                  13:18:32   Log-Likelihood:            -3.9856e+05
+No. Observations:                                         42169   AIC:                         7.971e+05
+Df Residuals:                                             42167   BIC:                         7.971e+05
+Df Model:                                                     1                                         
+Covariance Type:                                      nonrobust                                         
+===============================================================================================
+                                  coef    std err          t      P>|t|      [0.025      0.975]
+-----------------------------------------------------------------------------------------------
+const                         295.8998     15.222     19.439      0.000     266.065     325.734
+(capx) Capital Expenditures     1.6409      0.008    206.544      0.000       1.625       1.656
+==============================================================================
+Omnibus:                    59828.387   Durbin-Watson:                   0.755
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):        431468680.153
+Skew:                           7.265   Prob(JB):                         0.00
+Kurtosis:                     498.332   Cond. No.                     1.94e+03
+==============================================================================
+
+Notes:
+[1] Standard Errors assume that the covariance matrix of the errors is correctly specified.
+[2] The condition number is large, 1.94e+03. This might indicate that there are
+strong multicollinearity or other numerical problems.

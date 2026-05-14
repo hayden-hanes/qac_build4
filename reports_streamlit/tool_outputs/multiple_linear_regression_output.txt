@@ -1,0 +1,22 @@
+{
+  "outcome": "(oancf) Operating Activities - Net Cash Flow",
+  "predictors": [
+    "(capx) Capital Expenditures"
+  ],
+  "n_rows_used": 42169,
+  "formula": "Q(\"(oancf) Operating Activities - Net Cash Flow\") ~ Q(\"(capx) Capital Expenditures\")",
+  "r_squared": 0.5029080393300416,
+  "adj_r_squared": 0.5028962506810822,
+  "params": {
+    "Intercept": 295.89982770849986,
+    "Q(\"(capx) Capital Expenditures\")": 1.6408850410765667
+  },
+  "pvalues": {
+    "Intercept": 8.338707819691471e-84,
+    "Q(\"(capx) Capital Expenditures\")": 0.0
+  },
+  "stderr": {
+    "Intercept": 15.221595516876041,
+    "Q(\"(capx) Capital Expenditures\")": 0.007944487472056526
+  }
+}

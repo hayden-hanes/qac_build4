@@ -8,7 +8,8 @@ This app provides a UI for interacting with the Build 4 backend, which includes:
 To run this app:
 1. Make sure you have the Build 4 backend implemented in builds/build4_rag_router_agent_streamlit.py
 2. Install Streamlit if you haven't: pip install streamlit
-3. Run this script: streamlit run scripts/app_streamlit_build4.py
+3. Run this script: 
+streamlit run scripts/app_streamlit_build4.py
 
 """
 
@@ -22,6 +23,7 @@ from typing import Optional
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Add project root to Python path for findingbuilds folder and importing src modules;
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -432,6 +434,12 @@ if backend is not None:
                             st.success(f"Tool ran: {tool_run_res['tool_name']}")
                             st.write("**Tool output**")
                             st.text(tool_run_res["tool_text"])
+
+                            if tool_run_res.get("html"):
+                                components.html(tool_run_res["html"], height=700, scrolling=True)
+                            else: 
+                                st.warning("")
+
                             st.write("**Summary**")
                             st.markdown(tool_run_res["summary"])
                             render_artifacts(
@@ -567,6 +575,12 @@ if backend is not None:
                     st.success(f"Tool ran: {tool_run_res['tool_name']}")
                     st.write("**Tool output**")
                     st.text(tool_run_res["tool_text"])
+
+                    if tool_run_res.get("html"):
+                        components.html(tool_run_res["html"], height=700, scrolling=True)
+                    else:
+                        st.warning("")
+
                     st.write("**Summary**")
                     st.markdown(tool_run_res["summary"])
                     render_artifacts(

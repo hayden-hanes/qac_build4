@@ -119,19 +119,7 @@ def compute_beneish(df):
     """
     Uses the full historical panel with year-over-year changes.
 
-    Components (all require t and t-1):
-      DSRI  = (Receivables(t)/Sales(t)) / (Receivables(t-1)/Sales(t-1))
-      GMI   = Gross Margin(t-1) / Gross Margin(t)
-      AQI   = (1 - (ACT(t) + PPEGT(t)) / AT(t)) / (1 - (ACT(t-1) + PPEGT(t-1)) / AT(t-1))
-      SGI   = Sales(t) / Sales(t-1)
-      DEPI  = (DEP(t-1) / (PPEGT(t-1) + DEP(t-1))) / (DEP(t) / (PPEGT(t) + DEP(t)))
-      SGAI  = (XSGA(t)/Sales(t)) / (XSGA(t-1)/Sales(t-1))
-      LVGI  = ((DEBT_LT(t) + DEBT_CL(t)) / AT(t)) / ((DEBT_LT(t-1) + DEBT_CL(t-1)) / AT(t-1))
-      TATA  = (NI(t) - OANCF(t)) / AT(t)
-
-    PROBM = -4.84 + 0.92*DSRI + 0.528*GMI + 0.404*AQI + 0.892*SGI
-            + 0.115*DEPI - 0.172*SGAI - 0.327*LVGI + 4.679*TATA
-    PMAN  = CDF(PROBM)   [lower = less likely to be manipulating = better]
+    PMAN is a screening signal, not proof of fraud.
     """
     df = _prepare(df)
     g = df.groupby(TICKER)
@@ -146,20 +134,21 @@ def compute_beneish(df):
     df["DEBT_t1"]  = g[DEBT_LT].shift(1) + g[DEBT_CL].shift(1)
     df["COGS_t1"]  = g[COGS].shift(1)
 
+    # Beneish component ratios
     df["DSRI"] = (df[RECT] / df[SALE]) / (df["RECT_t1"] / df["SALE_t1"])
 
     gm_t  = (df[SALE] - df[COGS]) / df[SALE]
     gm_t1 = (df["SALE_t1"] - df["COGS_t1"]) / df["SALE_t1"]
     df["GMI"] = gm_t1 / gm_t
 
-    aq_t  = 1 - (df[ACT]       + df[PPEGT])       / df[AT]
-    aq_t1 = 1 - (df["ACT_t1"]  + df["PPEGT_t1"])  / df["AT_t1"]
+    aq_t  = 1 - (df[ACT] + df[PPEGT]) / df[AT]
+    aq_t1 = 1 - (df["ACT_t1"] + df["PPEGT_t1"]) / df["AT_t1"]
     df["AQI"] = aq_t / aq_t1
 
     df["SGI"] = df[SALE] / df["SALE_t1"]
 
-    dep_rate_t  = df[DP]       / (df[PPEGT]       + df[DP])
-    dep_rate_t1 = df["DP_t1"]  / (df["PPEGT_t1"]  + df["DP_t1"])
+    dep_rate_t  = df[DP] / (df[PPEGT] + df[DP])
+    dep_rate_t1 = df["DP_t1"] / (df["PPEGT_t1"] + df["DP_t1"])
     df["DEPI"] = dep_rate_t1 / dep_rate_t
 
     df["SGAI"] = (df[XSGA] / df[SALE]) / (df["XSGA_t1"] / df["SALE_t1"])
@@ -170,6 +159,23 @@ def compute_beneish(df):
 
     df["TATA"] = (df[NI] - df[OANCF]) / df[AT]
 
+    # Stabilize raw ratio inputs before computing the score
+    ratio_cols = ["DSRI", "GMI", "AQI", "SGI", "DEPI", "SGAI", "LVGI", "TATA"]
+
+    for col in ratio_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+
+    df["DSRI"] = df["DSRI"].clip(0, 5)
+    df["GMI"]  = df["GMI"].clip(0, 5)
+    df["AQI"]  = df["AQI"].clip(0, 5)
+    df["SGI"]  = df["SGI"].clip(0, 5)
+    df["DEPI"] = df["DEPI"].clip(0, 5)
+    df["SGAI"] = df["SGAI"].clip(0, 5)
+    df["LVGI"] = df["LVGI"].clip(0, 5)
+    df["TATA"] = df["TATA"].clip(-1, 1)
+
+    # Beneish M-score
     df["PROBM"] = (
         -4.84
         + 0.920 * df["DSRI"]
@@ -182,13 +188,19 @@ def compute_beneish(df):
         + 4.679 * df["TATA"]
     )
 
-    df["PMAN"] = df["PROBM"].apply(lambda x: norm.cdf(x) if pd.notna(x) else np.nan)
+    df["PROBM"] = pd.to_numeric(df["PROBM"], errors="coerce")
+    df["PROBM"] = df["PROBM"].replace([np.inf, -np.inf], np.nan)
+    df["PROBM"] = df["PROBM"].clip(-5, 5)
 
-    cols = [TICKER, COMPANY, DATE,
-            "DSRI", "GMI", "AQI", "SGI", "DEPI", "SGAI", "LVGI", "TATA",
-            "PROBM", "PMAN"]
+    df["PMAN"] = norm.cdf(df["PROBM"])
+
+    cols = [
+        TICKER, COMPANY, DATE,
+        "DSRI", "GMI", "AQI", "SGI", "DEPI", "SGAI", "LVGI", "TATA",
+        "PROBM", "PMAN",
+    ]
+
     return df[cols]
-
 #pdf financial distress
 
 def compute_distress(df):
@@ -451,7 +463,13 @@ def score_accruals(df, **kwargs):
 def score_beneish(df, **kwargs):
     result = compute_beneish(df)
     latest = result.sort_values(DATE).groupby(TICKER, as_index=False).last()
-    return {"text": latest[[TICKER, COMPANY, "PROBM", "PMAN"]].to_string(index=False), "artifact_paths": []}
+    output = latest[[TICKER, COMPANY, "PROBM", "PMAN"]]
+
+    return {
+        "text": output.to_string(index =False),
+        "dataframe": output,
+        "artifact_paths": [],
+    }
 
 def score_distress(df, **kwargs):
     result = compute_distress(df)

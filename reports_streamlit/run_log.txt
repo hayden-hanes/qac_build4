@@ -1,0 +1,8 @@
+=== STDOUT ===
+(empty)
+
+=== STDERR ===
+(empty)
+
+=== RETURN CODE ===
+0
