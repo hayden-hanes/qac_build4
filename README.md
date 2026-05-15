@@ -1,4 +1,4 @@
-# Build 4
+# QAC 387 Final Project
 
 **Course:** QAC387  
 
@@ -20,18 +20,17 @@ Second, create and activate a virtual working environment (.venv) and download t
 
 pip install -r requirements.txt
 
-Third, use this bash command to run the application: 
-
-python builds/build4_rag_router_agent_faiss.py --data data/qac387_data.csv --report_dir reports --knowledge_dir knowledge --session_id cli-session --memory
+Third, use the bash command outlined in the top of the latest build file to run the application. 
 
 Fourth, interact with the AI agent by using commands of your choice. Note that your choice should be prefaced with "ask" or "tool". 
 
 Fifth, press (y/n) to approve code development or tool usage from the AI agent. 
 
 This version has RAG implemented and can inform the user about how the calculations are derived and why they are powerful. 
+Run this code with Streamlit to experience a well designed front - end. 
 
 ## Cautions for using the app 
 
 Code generation from the AI agent may be incorrect or have minor bugs, all code generation and tool usage should be reviewed by the user first. 
-The current dataset is not entirely complete, currently it includes on 6 companies for testing purposes, however using WRDS we will be able to easily replicate our dataset with more recent financial data as well as a more robust list of stocks, ideally in the range of 500-2000 stocks. Further, it is of note that the agent to still sensitive to work choice, if you ask the agent to use a tool without naming some of the key words explicitly it may not recognize the tool. Lastly, the financial data included does not include financial data from months past January of 2026 (01/2026). 
+Further, it is of note that the agent to still sensitive to word choice, if you ask the agent to use a tool without naming some of the key words explicitly it may not recognize the tool. Lastly, the financial data included does not include financial data from months past January of 2026 (01/2026). 
 
